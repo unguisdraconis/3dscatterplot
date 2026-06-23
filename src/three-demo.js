@@ -11,6 +11,44 @@ import {
   arc,
 } from "./data.js";
 
+// ---------------- Regression Helpers ----------------
+
+// Slope + intercept
+export const linearRegression = (data) => {
+  const xMean = d3.mean(data, (d) => d.x);
+  const yMean = d3.mean(data, (d) => d.y);
+  const slope =
+    d3.sum(data, (d) => (d.x - xMean) * (d.y - yMean)) /
+    d3.sum(data, (d) => (d.x - xMean) ** 2);
+  const intercept = yMean - slope * xMean;
+  return { slope, intercept };
+};
+
+// R²
+export const computeR2 = (data, slope, intercept) => {
+  const yMean = d3.mean(data, (d) => d.y);
+  const ssTotal = d3.sum(data, (d) => (d.y - yMean) ** 2);
+  const ssResidual = d3.sum(
+    data,
+    (d) => (d.y - (slope * d.x + intercept)) ** 2,
+  );
+  return 1 - ssResidual / ssTotal;
+};
+
+// Correlation
+export const computeCorrelation = (data) => {
+  const xMean = d3.mean(data, (d) => d.x);
+  const yMean = d3.mean(data, (d) => d.y);
+
+  const num = d3.sum(data, (d) => (d.x - xMean) * (d.y - yMean));
+  const den = Math.sqrt(
+    d3.sum(data, (d) => (d.x - xMean) ** 2) *
+      d3.sum(data, (d) => (d.y - yMean) ** 2),
+  );
+
+  return num / den;
+};
+
 // All datasets you want to use:
 const datasets = [
   { name: "Linear", data: linear },
@@ -22,6 +60,9 @@ const datasets = [
 ];
 
 const pointClouds = [];
+
+let regressionLine = null;
+let regressionLabel = null;
 
 // Okabe–Ito palette
 const okabeIto = [
@@ -63,12 +104,45 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.005;
 
+// Entrance animation state
+let introStart = performance.now();
+let introDuration = 3000; // 10 seconds
+let introActive = true;
+
+// Camera starting far away
+const introCameraStart = new THREE.Vector3(0, 0, 80);
+const introCameraEnd = camera.position.clone();
+
+// Set initial camera position
+camera.position.copy(introCameraStart);
+
 // Add cube edges
 const box = new THREE.BoxHelper(
   new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10)),
   0x4444ff,
 );
 scene.add(box);
+
+const cubeGroup = new THREE.Group();
+cubeGroup.add(box);
+scene.add(cubeGroup);
+
+// Remove previous regression line + label
+function clearRegression() {
+  if (regressionLine) {
+    cubeGroup.remove(regressionLine);
+    regressionLine.geometry.dispose();
+    regressionLine.material.dispose();
+    regressionLine = null;
+  }
+
+  if (regressionLabel) {
+    cubeGroup.remove(regressionLabel);
+    regressionLabel.geometry.dispose();
+    regressionLabel.material.dispose();
+    regressionLabel = null;
+  }
+}
 
 const faceTransforms = [
   // FRONT (+Z)
@@ -104,7 +178,36 @@ datasets.forEach((ds, i) => {
     positions.push(p.x, p.y, p.z);
   });
 
-  const geometry = new THREE.BufferGeometry();
+  // Sphere geometry for each point
+  const sphereGeo = new THREE.SphereGeometry(0.15, 16, 16);
+  const sphereMat = new THREE.MeshStandardMaterial({
+    color,
+    transparent: true,
+    opacity: 1,
+  });
+
+  // Instanced mesh: one draw call per dataset
+  const instanced = new THREE.InstancedMesh(
+    sphereGeo,
+    sphereMat,
+    positions.length / 3,
+  );
+
+  const dummy = new THREE.Object3D();
+
+  for (let j = 0; j < positions.length; j += 3) {
+    dummy.position.set(positions[j], positions[j + 1], positions[j + 2]);
+    dummy.updateMatrix();
+    instanced.setMatrixAt(j / 3, dummy.matrix);
+  }
+
+  instanced.instanceMatrix.needsUpdate = true;
+
+  cubeGroup.add(instanced);
+  pointClouds.push(instanced);
+
+  // Create flat geometry for sqaure sprites
+  /*const geometry = new THREE.BufferGeometry();
   geometry.setAttribute(
     "position",
     new THREE.Float32BufferAttribute(positions, 3),
@@ -116,10 +219,80 @@ datasets.forEach((ds, i) => {
   });
 
   const points = new THREE.Points(geometry, material);
-  scene.add(points);
+  cubeGroup.add(points);
 
   pointClouds.push(points); // store it
+  */
 });
+
+// Draw regression line + R² + correlation
+function drawRegressionForDataset(index) {
+  clearRegression();
+
+  const ds = datasets[index].data;
+
+  const { slope, intercept } = linearRegression(ds);
+  const r2 = computeR2(ds, slope, intercept);
+  const corr = computeCorrelation(ds);
+
+  // Build smooth line
+  const samples = d3.range(0, 10.01, 0.1);
+  const linePoints = samples.map((x) => ({
+    x: xScale(x),
+    y: yScale(slope * x + intercept),
+  }));
+
+  const transform = faceTransforms[index];
+  const positions = [];
+
+  linePoints.forEach((p) => {
+    const t = transform(p.x, p.y);
+    positions.push(t.x, t.y, t.z);
+  });
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3),
+  );
+
+  const material = new THREE.LineBasicMaterial({
+    color: "#999999",
+    linewidth: 2,
+  });
+
+  regressionLine = new THREE.Line(geometry, material);
+  cubeGroup.add(regressionLine);
+
+  // Label
+  const labelText = `R² = ${r2.toFixed(3)}\nCorr = ${corr.toFixed(3)}`;
+
+  const loader = new THREE.FontLoader();
+  loader.load(
+    "https://threejs.org/examples/fonts/helvetiker_regular.typeface.json",
+    (font) => {
+      const textGeo = new THREE.TextGeometry(labelText, {
+        font,
+        size: 0.4,
+        height: 0.05,
+      });
+
+      const textMat = new THREE.MeshBasicMaterial({ color: "#999999" });
+      regressionLabel = new THREE.Mesh(textGeo, textMat);
+
+      const t = transform(0, 10);
+      regressionLabel.position.set(t.x, t.y, t.z);
+      cubeGroup.add(regressionLabel);
+    },
+  );
+}
+
+// Add light source to the scene, required for spheres
+const light = new THREE.DirectionalLight(0xffffff, 1.2);
+light.position.set(10, 10, 10);
+scene.add(light);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 
 function animateOpacity(selectedIndex, duration = 0.002) {
   let t = 0;
@@ -183,8 +356,11 @@ datasets.forEach((ds, i) => {
   btn.textContent = ds.name;
 
   btn.addEventListener("click", () => {
-    animateCameraTo(cameraTargets[i]); // camera animation
-    animateOpacity(i); // opacity animation
+    animateCameraTo(cameraTargets[i]);
+    animateOpacity(i);
+
+    // Delay regression until camera finishes moving
+    setTimeout(() => drawRegressionForDataset(i), 600);
   });
 
   btnContainer.appendChild(btn);
@@ -193,7 +369,33 @@ datasets.forEach((ds, i) => {
 // Animation loop
 function animate() {
   requestAnimationFrame(animate);
-  controls.update();
+
+  const now = performance.now();
+  const elapsed = now - introStart;
+
+  if (introActive) {
+    // 0 → 1 easing factor
+    const t = Math.min(elapsed / introDuration, 1);
+
+    // Rapid spin at start, slowing down
+    const spinSpeed = (1 - t) * 0.05; // fast → slow
+    cubeGroup.rotation.x += spinSpeed;
+    cubeGroup.rotation.y += spinSpeed * 0.2;
+
+    // Camera zoom-in animation
+    camera.position.lerpVectors(introCameraStart, introCameraEnd, t);
+    controls.target.lerp(new THREE.Vector3(0, 0, 0), t);
+
+    if (t >= 1) {
+      introActive = false;
+      cubeGroup.rotation.set(0, 0, 0); // realign cube with camera targets
+      clearRegression();
+    }
+  } else {
+    // Normal interactive mode
+    controls.update();
+  }
+
   renderer.render(scene, camera);
 }
 animate();
