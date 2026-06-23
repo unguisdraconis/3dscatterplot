@@ -136,12 +136,8 @@ function clearRegression() {
     regressionLine = null;
   }
 
-  if (regressionLabel) {
-    cubeGroup.remove(regressionLabel);
-    regressionLabel.geometry.dispose();
-    regressionLabel.material.dispose();
-    regressionLabel = null;
-  }
+  // Clear HTML label
+  document.getElementById("regression-stats").textContent = "";
 }
 
 const faceTransforms = [
@@ -264,27 +260,8 @@ function drawRegressionForDataset(index) {
   regressionLine = new THREE.Line(geometry, material);
   cubeGroup.add(regressionLine);
 
-  // Label
-  const labelText = `R² = ${r2.toFixed(3)}\nCorr = ${corr.toFixed(3)}`;
-
-  const loader = new THREE.FontLoader();
-  loader.load(
-    "https://threejs.org/examples/fonts/helvetiker_regular.typeface.json",
-    (font) => {
-      const textGeo = new THREE.TextGeometry(labelText, {
-        font,
-        size: 0.4,
-        height: 0.05,
-      });
-
-      const textMat = new THREE.MeshBasicMaterial({ color: "#999999" });
-      regressionLabel = new THREE.Mesh(textGeo, textMat);
-
-      const t = transform(0, 10);
-      regressionLabel.position.set(t.x, t.y, t.z);
-      cubeGroup.add(regressionLabel);
-    },
-  );
+  document.getElementById("regression-stats").textContent =
+    `R² = ${r2.toFixed(3)}    Corr = ${corr.toFixed(3)}`;
 }
 
 // Add light source to the scene, required for spheres

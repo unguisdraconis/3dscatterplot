@@ -55,6 +55,21 @@
       scale(0.8);
   }
 }
+#three-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+#regression-stats {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 18px;
+  color: #cccccc;
+  font-family: sans-serif;
+  white-space: pre-line; /* allows line breaks */
+}
 
 #center {
   display: flex;
