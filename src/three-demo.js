@@ -21,6 +21,8 @@ const datasets = [
   { name: "Arc", data: arc },
 ];
 
+const pointClouds = [];
+
 // Okabe–Ito palette
 const okabeIto = [
   "#E69F00",
@@ -59,6 +61,7 @@ document.getElementById("three-container").appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
+controls.dampingFactor = 0.005;
 
 // Add cube edges
 const box = new THREE.BoxHelper(
@@ -114,7 +117,34 @@ datasets.forEach((ds, i) => {
 
   const points = new THREE.Points(geometry, material);
   scene.add(points);
+
+  pointClouds.push(points); // store it
 });
+
+function animateOpacity(selectedIndex, duration = 0.002) {
+  let t = 0;
+
+  const startOpacities = pointClouds.map((pc) => pc.material.opacity);
+  const endOpacities = pointClouds.map((pc, i) =>
+    i === selectedIndex ? 1 : 0.3,
+  );
+
+  function step() {
+    t += duration;
+
+    pointClouds.forEach((pc, i) => {
+      const start = startOpacities[i];
+      const end = endOpacities[i];
+      pc.material.opacity = start + (end - start) * t;
+      pc.material.transparent = true;
+      pc.material.needsUpdate = true;
+    });
+
+    if (t < 1) requestAnimationFrame(step);
+  }
+
+  step();
+}
 
 // Camera targets for each dataset
 const cameraTargets = [
@@ -132,7 +162,7 @@ function animateCameraTo(target) {
   const end = new THREE.Vector3(target.x, target.y, target.z);
 
   let t = 0;
-  const duration = 0.02; // smooth speed
+  const duration = 0.002; // smooth speed
 
   function step() {
     t += duration;
@@ -151,8 +181,12 @@ btnContainer.innerHTML = ""; // clear existing
 datasets.forEach((ds, i) => {
   const btn = document.createElement("button");
   btn.textContent = ds.name;
-  btn.style.marginRight = "6px";
-  btn.addEventListener("click", () => animateCameraTo(cameraTargets[i]));
+
+  btn.addEventListener("click", () => {
+    animateCameraTo(cameraTargets[i]); // camera animation
+    animateOpacity(i); // opacity animation
+  });
+
   btnContainer.appendChild(btn);
 });
 
