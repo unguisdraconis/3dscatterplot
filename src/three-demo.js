@@ -1,31 +1,45 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import * as d3 from "d3";
-import { linear, curve, badRepartition, outlier } from "./data.js";
 
-// Pick which dataset to visualize:
-const data = linear; // change to curve, badRepartition, outlier
+import {
+  linear,
+  curve,
+  badRepartition,
+  outlier,
+  diagonal,
+  arc,
+} from "./data.js";
 
-// D3 scales for x and y
+// All datasets you want to use:
+const datasets = [
+  { name: "Linear", data: linear },
+  { name: "Curve", data: curve },
+  { name: "Bad Repartition", data: badRepartition },
+  { name: "Outlier", data: outlier },
+  { name: "Diagonal", data: diagonal },
+  { name: "Arc", data: arc },
+];
+
+// Okabe–Ito palette
+const okabeIto = [
+  "#E69F00",
+  "#56B4E9",
+  "#009E73",
+  "#F0E442",
+  "#0072B2",
+  "#D55E00",
+  "#CC79A7",
+];
+
+// Cube face Z positions (6 faces)
+const cubeFaces = [-5, 5, -5, 5, -5, 5];
+
+// D3 scales
 const xScale = d3.scaleLinear().domain([0, 10]).range([-5, 5]);
 const yScale = d3.scaleLinear().domain([0, 10]).range([-5, 5]);
 
-// Z positions on cube faces
-const cubeFaces = [-5, 5]; // front and back faces
-let faceIndex = 0;
-
-// Convert dataset into 3D points
-const points3D = data.map((d) => {
-  const z = cubeFaces[faceIndex];
-  faceIndex = (faceIndex + 1) % cubeFaces.length; // alternate faces
-  return {
-    x: xScale(d.x),
-    y: yScale(d.y),
-    z,
-  };
-});
-
-// Three.js setup
+// THREE.js setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111111);
 
@@ -35,44 +49,112 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000,
 );
-camera.position.set(10, 10, 10);
+camera.position.set(15, 15, 15);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
 
-// OrbitControls
+// IMPORTANT: attach to isolated container so React cannot delete it
+document.getElementById("three-container").appendChild(renderer.domElement);
+
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.dampingFactor = 0.05;
 
-// Build geometry
-const geometry = new THREE.BufferGeometry();
-const positions = [];
-
-points3D.forEach((p) => {
-  positions.push(p.x, p.y, p.z);
-});
-
-geometry.setAttribute(
-  "position",
-  new THREE.Float32BufferAttribute(positions, 3),
-);
-
-const material = new THREE.PointsMaterial({
-  color: 0xff4444,
-  size: 0.25,
-});
-
-const points = new THREE.Points(geometry, material);
-scene.add(points);
-
-// Cube edges for reference
+// Add cube edges
 const box = new THREE.BoxHelper(
   new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10)),
   0x4444ff,
 );
 scene.add(box);
+
+const faceTransforms = [
+  // FRONT (+Z)
+  (x, y) => ({ x, y, z: 5 }),
+
+  // BACK (–Z)
+  (x, y) => ({ x, y, z: -5 }),
+
+  // RIGHT (+X)
+  (x, y) => ({ x: 5, y, z: x }),
+
+  // LEFT (–X)
+  (x, y) => ({ x: -5, y, z: x }),
+
+  // TOP (+Y)
+  (x, y) => ({ x, y: 5, z: y }),
+
+  // BOTTOM (–Y)
+  (x, y) => ({ x, y: -5, z: y }),
+];
+
+// Build point clouds — one per dataset
+datasets.forEach((ds, i) => {
+  const color = okabeIto[i % okabeIto.length];
+  const transform = faceTransforms[i % faceTransforms.length];
+
+  const positions = [];
+
+  ds.data.forEach((d) => {
+    const x = xScale(d.x);
+    const y = yScale(d.y);
+    const p = transform(x, y);
+    positions.push(p.x, p.y, p.z);
+  });
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3),
+  );
+
+  const material = new THREE.PointsMaterial({
+    color,
+    size: 0.25,
+  });
+
+  const points = new THREE.Points(geometry, material);
+  scene.add(points);
+});
+
+// Camera targets for each dataset
+const cameraTargets = [
+  { x: 0, y: 0, z: 20 }, // front
+  { x: 0, y: 0, z: -20 }, // back
+  { x: 20, y: 0, z: 0 }, // right
+  { x: -20, y: 0, z: 0 }, // left
+  { x: 0, y: 20, z: 0 }, // top
+  { x: 0, y: -20, z: 0 }, // bottom
+];
+
+// Animate camera transitions
+function animateCameraTo(target) {
+  const start = camera.position.clone();
+  const end = new THREE.Vector3(target.x, target.y, target.z);
+
+  let t = 0;
+  const duration = 0.02; // smooth speed
+
+  function step() {
+    t += duration;
+    camera.position.lerpVectors(start, end, t);
+    controls.target.lerp(new THREE.Vector3(0, 0, 0), t);
+
+    if (t < 1) requestAnimationFrame(step);
+  }
+  step();
+}
+
+// Create buttons dynamically
+const btnContainer = document.getElementById("three-buttons");
+btnContainer.innerHTML = ""; // clear existing
+
+datasets.forEach((ds, i) => {
+  const btn = document.createElement("button");
+  btn.textContent = ds.name;
+  btn.style.marginRight = "6px";
+  btn.addEventListener("click", () => animateCameraTo(cameraTargets[i]));
+  btnContainer.appendChild(btn);
+});
 
 // Animation loop
 function animate() {
@@ -82,7 +164,7 @@ function animate() {
 }
 animate();
 
-// Resize handler
+// Resize
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();

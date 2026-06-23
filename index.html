@@ -8,82 +8,20 @@
       body {
         margin: 0;
         overflow: hidden;
-        background: #111;
+        background: steelblue;
       }
     </style>
   </head>
   <body>
-    <script type="module" src="/src/three-demo.js"></script>
+    <div id="three-container"></div>
 
+    <div
+      id="three-buttons"
+      style="position: absolute; top: 10px; left: 10px; z-index: 10"
+    ></div>
 
-      // Generate random dataset
-      const data = Array.from({ length: 20 }, () => ({
-        x: Math.random() * 100,
-        y: Math.random() * 100,
-        z: Math.random() * 30,
-      }));
+    <div id="root"></div>
 
-      // D3 scales to map data to 3D coordinates
-      const xScale = d3.scaleLinear().domain([0, 100]).range([-5, 5]);
-      const yScale = d3.scaleLinear().domain([0, 100]).range([-5, 5]);
-      const zScale = d3.scaleLinear().domain([0, 30]).range([-5, 5]);
-
-      // Three.js setup
-      const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x111111);
-
-      const camera = new THREE.PerspectiveCamera(
-        75,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        1000,
-      );
-      camera.position.set(10, 10, 10);
-
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      document.body.appendChild(renderer.domElement);
-
-      // OrbitControls
-      const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true; // smooth motion
-      controls.dampingFactor = 0.05;
-      controls.minDistance = 2;
-      controls.maxDistance = 50;
-
-      // Create points from data
-      const geometry = new THREE.BufferGeometry();
-      const positions = [];
-      data.forEach((d) => {
-        positions.push(xScale(d.x), yScale(d.y), zScale(d.z));
-      });
-      geometry.setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(positions, 3),
-      );
-
-      const material = new THREE.PointsMaterial({ color: 0xff4444, size: 0.2 });
-      const points = new THREE.Points(geometry, material);
-      scene.add(points);
-
-      // Add a grid helper for reference
-      const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
-      scene.add(gridHelper);
-
-      // Animation loop
-      function animate() {
-        requestAnimationFrame(animate);
-        controls.update(); // required for damping
-        renderer.render(scene, camera);
-      }
-      animate();
-
-      // Handle window resize
-      window.addEventListener("resize", () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      });
-    </script>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
