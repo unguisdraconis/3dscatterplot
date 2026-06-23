@@ -260,6 +260,25 @@ function drawRegressionForDataset(index) {
   regressionLine = new THREE.Line(geometry, material);
   cubeGroup.add(regressionLine);
 
+  // --- Animate the regression line being drawn ---
+  let progress = 0;
+  const totalPoints = positions.length / 3; // number of vertices
+  const speed = 0.1; // increase for faster drawing
+
+  // Start with nothing drawn
+  geometry.setDrawRange(0, 0);
+
+  function animateLine() {
+    progress += speed;
+    geometry.setDrawRange(0, Math.min(progress, totalPoints));
+
+    if (progress < totalPoints) {
+      requestAnimationFrame(animateLine);
+    }
+  }
+
+  animateLine();
+
   document.getElementById("regression-stats").textContent =
     `R² = ${r2.toFixed(3)}    Corr = ${corr.toFixed(3)}`;
 }
