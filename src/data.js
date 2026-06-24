@@ -53,26 +53,23 @@ export const outlier = [
   { x: 9, y: 9 }, // outlier
 ];
 
-export const diagonal = [
-  { x: 1, y: 1 },
-  { x: 2, y: 2.2 },
-  { x: 3, y: 3.1 },
-  { x: 4, y: 4.3 },
-  { x: 5, y: 5.2 },
-  { x: 6, y: 6.1 },
-  { x: 7, y: 7.4 },
-  { x: 8, y: 8.2 },
-  { x: 9, y: 9.1 },
+export const exponentialLike = [
+  { x: 1, y: 2 },
+  { x: 2, y: 3.5 },
+  { x: 3, y: 6.1 },
+  { x: 4, y: 8.5 },
+  { x: 5, y: 9.7 }, // approaching 10
 ];
 
-export const arc = [
-  { x: 1, y: 5 },
-  { x: 2, y: 6.2 },
-  { x: 3, y: 7.1 },
-  { x: 4, y: 7.8 },
-  { x: 5, y: 8 },
-  { x: 6, y: 7.7 },
-  { x: 7, y: 6.9 },
-  { x: 8, y: 5.8 },
-  { x: 9, y: 4.9 },
+export const random = [
+  { x: 3, y: 5 },
+  { x: 1, y: 8 },
+  { x: 7, y: 2 },
+  { x: 9, y: 6 },
+  { x: 4, y: 1 },
+  { x: 10, y: 3 },
+  { x: 5, y: 9 },
+  { x: 8, y: 7 },
+  { x: 2, y: 4 },
+  { x: 6, y: 0 },
 ];

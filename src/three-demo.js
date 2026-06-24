@@ -7,8 +7,8 @@ import {
   curve,
   badRepartition,
   outlier,
-  diagonal,
-  arc,
+  exponentialLike,
+  random,
 } from "./data.js";
 
 const axisHtmlLabels = [];
@@ -57,8 +57,8 @@ const datasets = [
   { name: "Curve", data: curve },
   { name: "Bad Repartition", data: badRepartition },
   { name: "Outlier", data: outlier },
-  { name: "Diagonal", data: diagonal },
-  { name: "Arc", data: arc },
+  { name: "ExponentialLike", data: exponentialLike },
+  { name: "random", data: random },
 ];
 
 const pointClouds = [];
@@ -553,7 +553,9 @@ function animate() {
     pos.project(camera);
 
     const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
-    const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
+
+    const yOffset = 50; // You can adjust this value as needed
+    const y = (-pos.y * 0.5 + 0.5) * window.innerHeight + yOffset;
 
     label.element.style.left = `${x}px`;
     label.element.style.top = `${y}px`;
