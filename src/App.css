@@ -197,3 +197,9 @@
     border-right-color: var(--border);
   }
 }
+
+.axis-label {
+  color: #888;
+  font-size: 12px;
+  font-family: sans-serif;
+}

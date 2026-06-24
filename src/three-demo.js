@@ -11,6 +11,8 @@ import {
   arc,
 } from "./data.js";
 
+const axisHtmlLabels = [];
+
 // ---------------- Regression Helpers ----------------
 
 // Slope + intercept
@@ -60,6 +62,8 @@ const datasets = [
 ];
 
 const pointClouds = [];
+
+const axisGroups = [];
 
 let regressionLine = null;
 let regressionLabel = null;
@@ -160,6 +164,119 @@ const faceTransforms = [
   (x, y) => ({ x, y: -5, z: y }),
 ];
 
+const axisFaceTransforms = [
+  (x, y) => ({ x, y, z: 5 }),
+  (x, y) => ({ x: -x, y, z: -5 }),
+  (x, y) => ({ x: 5, y, z: -x }),
+  (x, y) => ({ x: -5, y, z: x }),
+  (x, y) => ({ x, y: 5, z: -y }),
+  (x, y) => ({ x, y: -5, z: y }),
+];
+
+function buildAxes() {
+  const tickValues = d3.range(0, 11, 1);
+  const labelContainer = document.getElementById("axis-labels");
+
+  for (let face = 0; face < 6; face++) {
+    const group = new THREE.Group();
+    const transform = axisFaceTransforms[face];
+
+    const axisMat = new THREE.LineBasicMaterial({
+      color: 0x666666,
+      transparent: true,
+      opacity: 0.15,
+    });
+
+    // X-axis
+    {
+      const p1 = transform(xScale(0), yScale(0));
+      const p2 = transform(xScale(10), yScale(0));
+
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(p1.x, p1.y, p1.z),
+        new THREE.Vector3(p2.x, p2.y, p2.z),
+      ]);
+
+      group.add(new THREE.Line(geo, axisMat.clone()));
+    }
+
+    // Y-axis
+    {
+      const p1 = transform(xScale(0), yScale(0));
+      const p2 = transform(xScale(0), yScale(10));
+
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(p1.x, p1.y, p1.z),
+        new THREE.Vector3(p2.x, p2.y, p2.z),
+      ]);
+
+      group.add(new THREE.Line(geo, axisMat.clone()));
+    }
+
+    // Tick marks + HTML labels
+    tickValues.forEach((t) => {
+      // X ticks
+      {
+        const x = xScale(t);
+        const y = yScale(0);
+
+        const p1 = transform(x, y);
+        const p2 = transform(x, yScale(-0.3));
+
+        const geo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(p1.x, p1.y, p1.z),
+          new THREE.Vector3(p2.x, p2.y, p2.z),
+        ]);
+
+        group.add(new THREE.Line(geo, axisMat.clone()));
+
+        // HTML label
+        const div = document.createElement("div");
+        div.className = "axis-label";
+        div.textContent = t;
+        labelContainer.appendChild(div);
+
+        axisHtmlLabels.push({
+          element: div,
+          position: new THREE.Vector3(p2.x, p2.y, p2.z),
+          face,
+        });
+      }
+
+      // Y ticks
+      {
+        const x = xScale(0);
+        const y = yScale(t);
+
+        const p1 = transform(x, y);
+        const p2 = transform(xScale(-0.3), y);
+
+        const geo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(p1.x, p1.y, p1.z),
+          new THREE.Vector3(p2.x, p2.y, p2.z),
+        ]);
+
+        group.add(new THREE.Line(geo, axisMat.clone()));
+
+        // HTML label
+        const div = document.createElement("div");
+        div.className = "axis-label";
+        div.textContent = t;
+        labelContainer.appendChild(div);
+
+        axisHtmlLabels.push({
+          element: div,
+          position: new THREE.Vector3(p2.x, p2.y, p2.z),
+          face,
+        });
+      }
+    });
+
+    axisGroups.push(group);
+    cubeGroup.add(group);
+  }
+}
+
 // Build point clouds — one per dataset
 datasets.forEach((ds, i) => {
   const color = okabeIto[i % okabeIto.length];
@@ -241,15 +358,31 @@ function drawRegressionForDataset(index) {
   const transform = faceTransforms[index];
   const positions = [];
 
-  linePoints.forEach((p) => {
+  // Transform points first
+  let transformed = linePoints.map((p) => {
     const t = transform(p.x, p.y);
-    positions.push(t.x, t.y, t.z);
+    return new THREE.Vector3(t.x, t.y, t.z);
+  });
+
+  // Project to screen space to determine left→right order
+  transformed.forEach((v) => {
+    const projected = v.clone().project(camera);
+    v._screenX = projected.x; // store screen X for sorting
+  });
+
+  // Sort by screen X (left → right)
+  transformed.sort((a, b) => a._screenX - b._screenX);
+
+  // Build final sorted positions array
+  const sortedPositions = [];
+  transformed.forEach((v) => {
+    sortedPositions.push(v.x, v.y, v.z);
   });
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute(
     "position",
-    new THREE.Float32BufferAttribute(positions, 3),
+    new THREE.Float32BufferAttribute(sortedPositions, 3),
   );
 
   const material = new THREE.LineBasicMaterial({
@@ -262,7 +395,7 @@ function drawRegressionForDataset(index) {
 
   // --- Animate the regression line being drawn ---
   let progress = 0;
-  const totalPoints = positions.length / 3; // number of vertices
+  const totalPoints = sortedPositions.length / 3;
   const speed = 0.1; // increase for faster drawing
 
   // Start with nothing drawn
@@ -290,6 +423,8 @@ scene.add(light);
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 
+buildAxes();
+
 function animateOpacity(selectedIndex, duration = 0.002) {
   let t = 0;
 
@@ -309,6 +444,23 @@ function animateOpacity(selectedIndex, duration = 0.002) {
       pc.material.needsUpdate = true;
     });
 
+    axisGroups.forEach((ag, i) => {
+      const targetOpacity = i === selectedIndex ? 1 : 0.15;
+
+      ag.children.forEach((child) => {
+        if (child.material) {
+          child.material.opacity =
+            child.material.opacity +
+            (targetOpacity - child.material.opacity) * t;
+          child.material.transparent = true;
+        }
+      });
+    });
+
+    axisHtmlLabels.forEach((label) => {
+      label.element.style.opacity = label.face === selectedIndex ? 1 : 0.15;
+    });
+
     if (t < 1) requestAnimationFrame(step);
   }
 
@@ -326,19 +478,23 @@ const cameraTargets = [
 ];
 
 // Animate camera transitions
-function animateCameraTo(target) {
+function animateCameraTo(target, onComplete) {
   const start = camera.position.clone();
   const end = new THREE.Vector3(target.x, target.y, target.z);
 
   let t = 0;
-  const duration = 0.002; // smooth speed
+  const duration = 0.002;
 
   function step() {
     t += duration;
     camera.position.lerpVectors(start, end, t);
     controls.target.lerp(new THREE.Vector3(0, 0, 0), t);
 
-    if (t < 1) requestAnimationFrame(step);
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      if (onComplete) onComplete();
+    }
   }
   step();
 }
@@ -352,11 +508,10 @@ datasets.forEach((ds, i) => {
   btn.textContent = ds.name;
 
   btn.addEventListener("click", () => {
-    animateCameraTo(cameraTargets[i]);
-    animateOpacity(i);
-
-    // Delay regression until camera finishes moving
-    setTimeout(() => drawRegressionForDataset(i), 600);
+    animateCameraTo(cameraTargets[i], () => {
+      animateOpacity(i);
+      drawRegressionForDataset(i);
+    });
   });
 
   btnContainer.appendChild(btn);
@@ -391,6 +546,18 @@ function animate() {
     // Normal interactive mode
     controls.update();
   }
+
+  // Update HTML label positions
+  axisHtmlLabels.forEach((label) => {
+    const pos = label.position.clone();
+    pos.project(camera);
+
+    const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
+
+    label.element.style.left = `${x}px`;
+    label.element.style.top = `${y}px`;
+  });
 
   renderer.render(scene, camera);
 }
