@@ -3,8 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.jsx";
 
-// Import Three.js scene so Vite processes it
-import "./three-demo.js";
+// three-demo.js is now imported lazily by ThreeCanvas.jsx — no top-level import needed here.
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

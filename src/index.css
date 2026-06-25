@@ -1,128 +1,194 @@
-:root {
-  --text: black;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
-
-  --sans: system-ui, "Segoe UI", Roboto, sans-serif;
-  --heading: system-ui, "Segoe UI", Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-body {
+/* ── Reset ───────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
   margin: 0;
+  padding: 0;
 }
 
+:root {
+  --bg: #111111;
+  --surface: #1a1a2e;
+  --surface2: #16213e;
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #e0e0e0;
+  --text-dim: #888;
+  --radius: 10px;
+  --sidebar-w: 240px;
+}
+
+html,
+body,
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  overflow: hidden;
+}
+
+/* ── Dashboard grid ──────────────────────────────────────── */
+.dashboard {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  height: 100dvh; /* dynamic viewport height */
+}
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.sidebar {
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
+  gap: 16px;
+  padding: 20px 16px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+.sidebar-title {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #fff;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
+.sidebar-sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  line-height: 1.5;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+/* ── Dataset buttons ─────────────────────────────────────── */
+.dataset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+.dataset-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
 
-#axis-labels {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: none;
+.dataset-btn:hover {
+  background: var(--surface2);
+  color: var(--text);
 }
 
+.dataset-btn.active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: #fff;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Regression stats card ───────────────────────────────── */
+.stats-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.stats-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.stats-body {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 0.8rem;
+  line-height: 1.8;
+  color: #a0c4ff;
+  white-space: pre;
+}
+
+/* ── Sidebar footer ──────────────────────────────────────── */
+.sidebar-footer {
+  margin-top: auto;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* ── Canvas area ─────────────────────────────────────────── */
+.canvas-area {
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Axis HTML labels (injected by three-demo.js) ───────── */
 .axis-label {
   position: absolute;
-  color: #ccc;
-  font-size: 12px;
-  font-family: sans-serif;
+  font-size: 9px;
+  color: #aaa;
   transform: translate(-50%, -50%);
-  opacity: 0.15;
-  transition: opacity 0.3s ease;
+  pointer-events: none;
+  transition: opacity 0.4s;
+  white-space: nowrap;
+}
+
+/* ── Responsive: collapse sidebar below 640 px ───────────── */
+@media (max-width: 640px) {
+  :root {
+    --sidebar-w: 100%;
+  }
+
+  .dashboard {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .sidebar-title,
+  .sidebar-sub,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .dataset-list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .dataset-btn {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+  }
 }
