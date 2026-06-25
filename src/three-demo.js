@@ -137,17 +137,29 @@ export function initScene({ container, labelsContainer, onStats }) {
 
   // ── Face transforms ────────────────────────────────────────────────────────
   //
-  // FIX: faceTransforms[4] (TOP) was (x,y)=>({x, y:5, z: y})
-  //      axisFaceTransforms[4] uses z: -y — data was mirrored from axes.
-  //      Corrected to z: -y so scatter points, regression, and axes all align.
+  // Camera orientations deduced from observed screen behaviour:
+  //
+  //   TOP    (y=+20): screen-right = world −X,  screen-up = world +Z
+  //   BOTTOM (y=−20): screen-right = world +X,  screen-up = world +Z
+  //
+  // TOP    fix 1 (this round): z: -y → z: +y
+  //   z: -y put data-y=0 at world z=+5 → screen TOP (wrong).
+  //   z: +y puts data-y=0 at world z=-5 → screen BOTTOM ✓
+  //
+  // BOTTOM fix 2 (this round): x: -x → x
+  //   x: -x put data-x=0 at world x=+5 → screen RIGHT (wrong, screen-right=+X).
+  //   x: +x puts data-x=0 at world x=-5 → screen LEFT ✓
+  //
+  // Both faceTransforms and axisFaceTransforms must be identical per face
+  // so that data points, regression, and axes all land on the same geometry.
 
   const faceTransforms = [
     (x, y) => ({ x, y, z: 5 }), // FRONT  +Z
     (x, y) => ({ x, y, z: -5 }), // BACK   -Z
     (x, y) => ({ x: 5, y, z: x }), // RIGHT  +X
     (x, y) => ({ x: -5, y, z: x }), // LEFT   -X
-    (x, y) => ({ x: -x, y: 5, z: -y }), // TOP    +Y  ← z: -y (fixed)
-    (x, y) => ({ x: -x, y: -5, z: y }), // BOTTOM -Y
+    (x, y) => ({ x: -x, y: 5, z: y }), // TOP   +Y  z: +y (fix 1)
+    (x, y) => ({ x, y: -5, z: y }), // BOTTOM -Y  x: +x (fix 2)
   ];
 
   const axisFaceTransforms = [
@@ -155,8 +167,8 @@ export function initScene({ container, labelsContainer, onStats }) {
     (x, y) => ({ x: -x, y, z: -5 }),
     (x, y) => ({ x: 5, y, z: -x }),
     (x, y) => ({ x: -5, y, z: x }),
-    (x, y) => ({ x: -x, y: 5, z: -y }), // TOP    (unchanged)
-    (x, y) => ({ x: -x, y: -5, z: y }), // BOTTOM (unchanged)
+    (x, y) => ({ x: -x, y: 5, z: y }), // TOP    z: +y (fix 1, matches faceTransforms)
+    (x, y) => ({ x, y: -5, z: y }), // BOTTOM x: +x (fix 2, matches faceTransforms)
   ];
 
   // ── Camera targets (one per face) ──────────────────────────────────────────
@@ -185,15 +197,15 @@ export function initScene({ container, labelsContainer, onStats }) {
     const ds = datasets[index].data;
     const transform = faceTransforms[index];
 
-    const isExponential = index === 4; // ← branch on dataset type
+    const isExponential = index === 4;
 
     let points3D;
     let statsStr;
 
     if (isExponential) {
       // ── Exponential fit: y = a·e^(bx) ──────────────────────────────────
-      // Sample 60 points to produce a smooth curve (2 endpoints would look
-      // linear regardless of the equation).
+      // Sample 60 points across [0,10] to produce a smooth curve — two
+      // endpoints would look like a straight line regardless of the equation.
       const { a, b } = exponentialRegression(ds);
       const r2 = computeR2Exp(ds, a, b);
       statsStr = `y = ${a.toFixed(3)}·e^(${b.toFixed(3)}x)\nR²: ${r2.toFixed(3)}`;
@@ -217,6 +229,12 @@ export function initScene({ container, labelsContainer, onStats }) {
         return new THREE.Vector3(p.x, p.y, p.z);
       });
     }
+
+    // Force-refresh the camera's world matrix so .project() uses the final
+    // animated position, not the stale value from the previous render frame.
+    // Without this, the screen-space sort uses wrong projected x values and
+    // the regression draws right-to-left on TOP and BOTTOM faces.
+    camera.updateMatrixWorld(true);
 
     // Sort left→right in screen space for a clean draw animation
     points3D.forEach((v) => {
