@@ -136,13 +136,18 @@ export function initScene({ container, labelsContainer, onStats }) {
   const yScale = d3.scaleLinear().domain([0, 10]).range([-5, 5]);
 
   // ── Face transforms ────────────────────────────────────────────────────────
+  //
+  // FIX: faceTransforms[4] (TOP) was (x,y)=>({x, y:5, z: y})
+  //      axisFaceTransforms[4] uses z: -y — data was mirrored from axes.
+  //      Corrected to z: -y so scatter points, regression, and axes all align.
+
   const faceTransforms = [
     (x, y) => ({ x, y, z: 5 }), // FRONT  +Z
     (x, y) => ({ x, y, z: -5 }), // BACK   -Z
     (x, y) => ({ x: 5, y, z: x }), // RIGHT  +X
     (x, y) => ({ x: -5, y, z: x }), // LEFT   -X
-    (x, y) => ({ x, y: 5, z: y }), // TOP    +Y
-    (x, y) => ({ x, y: -5, z: y }), // BOTTOM -Y
+    (x, y) => ({ x: -x, y: 5, z: -y }), // TOP    +Y  ← z: -y (fixed)
+    (x, y) => ({ x: -x, y: -5, z: y }), // BOTTOM -Y
   ];
 
   const axisFaceTransforms = [
@@ -150,8 +155,8 @@ export function initScene({ container, labelsContainer, onStats }) {
     (x, y) => ({ x: -x, y, z: -5 }),
     (x, y) => ({ x: 5, y, z: -x }),
     (x, y) => ({ x: -5, y, z: x }),
-    (x, y) => ({ x, y: 5, z: y }),
-    (x, y) => ({ x, y: -5, z: y }),
+    (x, y) => ({ x: -x, y: 5, z: -y }), // TOP    (unchanged)
+    (x, y) => ({ x: -x, y: -5, z: y }), // BOTTOM (unchanged)
   ];
 
   // ── Camera targets (one per face) ──────────────────────────────────────────
@@ -178,24 +183,49 @@ export function initScene({ container, labelsContainer, onStats }) {
   function drawRegressionForDataset(index) {
     clearRegression();
     const ds = datasets[index].data;
-    const { slope, intercept } = linearRegression(ds);
-    const r2 = computeR2(ds, slope, intercept);
-    const corr = computeCorrelation(ds);
-
     const transform = faceTransforms[index];
-    let transformed = d3.range(0, 10.01, 0.1).map((xv) => {
-      const p = transform(xScale(xv), yScale(slope * xv + intercept));
-      return new THREE.Vector3(p.x, p.y, p.z);
-    });
+
+    const isExponential = index === 4; // ← branch on dataset type
+
+    let points3D;
+    let statsStr;
+
+    if (isExponential) {
+      // ── Exponential fit: y = a·e^(bx) ──────────────────────────────────
+      // Sample 60 points to produce a smooth curve (2 endpoints would look
+      // linear regardless of the equation).
+      const { a, b } = exponentialRegression(ds);
+      const r2 = computeR2Exp(ds, a, b);
+      statsStr = `y = ${a.toFixed(3)}·e^(${b.toFixed(3)}x)\nR²: ${r2.toFixed(3)}`;
+
+      const N = 60;
+      points3D = Array.from({ length: N + 1 }, (_, i) => {
+        const xv = (i / N) * 10;
+        const yv = Math.max(0, Math.min(10, a * Math.exp(b * xv)));
+        const p = transform(xScale(xv), yScale(yv));
+        return new THREE.Vector3(p.x, p.y, p.z);
+      });
+    } else {
+      // ── Linear fit: y = slope·x + intercept ────────────────────────────
+      const { slope, intercept } = linearRegression(ds);
+      const r2 = computeR2(ds, slope, intercept);
+      const corr = computeCorrelation(ds);
+      statsStr = `R²:   ${r2.toFixed(3)}\nCorr: ${corr.toFixed(3)}`;
+
+      points3D = d3.range(0, 10.01, 0.1).map((xv) => {
+        const p = transform(xScale(xv), yScale(slope * xv + intercept));
+        return new THREE.Vector3(p.x, p.y, p.z);
+      });
+    }
 
     // Sort left→right in screen space for a clean draw animation
-    transformed.forEach((v) => {
+    points3D.forEach((v) => {
       v._sx = v.clone().project(camera).x;
     });
-    transformed.sort((a, b) => a._sx - b._sx);
+    points3D.sort((a, b) => a._sx - b._sx);
 
     const flat = [];
-    transformed.forEach((v) => flat.push(v.x, v.y, v.z));
+    points3D.forEach((v) => flat.push(v.x, v.y, v.z));
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute(flat, 3));
@@ -215,7 +245,7 @@ export function initScene({ container, labelsContainer, onStats }) {
       if (progress < total) requestAnimationFrame(drawStep);
     })();
 
-    onStats?.(`R²:   ${r2.toFixed(3)}\nCorr: ${corr.toFixed(3)}`);
+    onStats?.(statsStr);
   }
 
   // ── Axes ───────────────────────────────────────────────────────────────────
