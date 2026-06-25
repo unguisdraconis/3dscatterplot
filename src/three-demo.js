@@ -7,7 +7,7 @@ import {
   curve,
   badRepartition,
   outlier,
-  exponentialLike,
+  exponential,
   random,
 } from "./data.js";
 
@@ -40,6 +40,28 @@ export const computeCorrelation = (data) => {
   return num / den;
 };
 
+// ── Exponential regression helpers ───────────────────────────────────────────
+//
+// Fits y = a · e^(bx) via log-linearisation: ln(y) = ln(a) + b·x
+// Points with y ≤ 0 are excluded (log undefined).
+//
+// Returns { a, b } where a = e^intercept, b = slope of ln(y) ~ x fit.
+
+export const exponentialRegression = (data) => {
+  const valid = data.filter((d) => d.y > 0);
+  const logData = valid.map((d) => ({ x: d.x, y: Math.log(d.y) }));
+  const { slope: b, intercept: lnA } = linearRegression(logData);
+  return { a: Math.exp(lnA), b };
+};
+
+// R² on the original (un-transformed) scale for the exponential fit.
+export const computeR2Exp = (data, a, b) => {
+  const yMean = d3.mean(data, (d) => d.y);
+  const ssTot = d3.sum(data, (d) => (d.y - yMean) ** 2);
+  const ssRes = d3.sum(data, (d) => (d.y - a * Math.exp(b * d.x)) ** 2);
+  return 1 - ssRes / ssTot;
+};
+
 // ── Public constants ─────────────────────────────────────────────────────────
 
 export const okabeIto = [
@@ -57,7 +79,7 @@ export const datasets = [
   { name: "Curve", data: curve },
   { name: "Bad Repartition", data: badRepartition },
   { name: "Outlier", data: outlier },
-  { name: "Exponential", data: exponentialLike },
+  { name: "Exponential", data: exponential },
   { name: "Random", data: random },
 ];
 
@@ -128,7 +150,7 @@ export function initScene({ container, labelsContainer, onStats }) {
     (x, y) => ({ x: -x, y, z: -5 }),
     (x, y) => ({ x: 5, y, z: -x }),
     (x, y) => ({ x: -5, y, z: x }),
-    (x, y) => ({ x, y: 5, z: -y }),
+    (x, y) => ({ x, y: 5, z: y }),
     (x, y) => ({ x, y: -5, z: y }),
   ];
 
