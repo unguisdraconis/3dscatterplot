@@ -35,7 +35,7 @@ body,
 .dashboard {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
-  height: 100dvh; /* dynamic viewport height */
+  height: 100dvh;
 }
 
 /* ── Sidebar ─────────────────────────────────────────────── */
@@ -134,9 +134,45 @@ body,
 /* ── Sidebar footer ──────────────────────────────────────── */
 .sidebar-footer {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.sidebar-footer > span {
   font-size: 0.68rem;
   color: var(--text-dim);
   text-align: center;
+}
+
+/* ── Social buttons ──────────────────────────────────────── */
+.social-links {
+  display: flex;
+  gap: 8px;
+}
+
+.social-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  text-decoration: none;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.social-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 /* ── Canvas area ─────────────────────────────────────────── */
