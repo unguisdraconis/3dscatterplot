@@ -58,6 +58,7 @@ export default function App() {
       {/* ── Sidebar ─────────────────────────────────────────── */}
       <aside className="sidebar">
         <h1 className="sidebar-title">3D Dataset Explorer</h1>
+        <p className="sidebar-byline">by Jeremiah King</p>
         <p className="sidebar-sub">
           Select a dataset to view it on the cube face.
         </p>

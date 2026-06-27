@@ -95,6 +95,10 @@ export function initScene({ container, labelsContainer, onStats }) {
   let regressionLine = null;
   let animFrameId = null;
 
+  // ── Tooltip state ──────────────────────────────────────────────────────────
+  let currentSelectedIndex = 0;
+  let pinnedInstance = null; // { datasetIdx, instanceId, worldPos }
+
   const W = () => container.clientWidth;
   const H = () => container.clientHeight;
 
@@ -116,7 +120,7 @@ export function initScene({ container, labelsContainer, onStats }) {
 
   // ── Intro animation ────────────────────────────────────────────────────────
   const introStart = performance.now();
-  const introDuration = 3000;
+  const introDuration = 2150;
   let introActive = true;
   const introCameraStart = new THREE.Vector3(0, 0, 80);
   const introCameraEnd = camera.position.clone();
@@ -136,30 +140,13 @@ export function initScene({ container, labelsContainer, onStats }) {
   const yScale = d3.scaleLinear().domain([0, 10]).range([-5, 5]);
 
   // ── Face transforms ────────────────────────────────────────────────────────
-  //
-  // Camera orientations deduced from observed screen behaviour:
-  //
-  //   TOP    (y=+20): screen-right = world −X,  screen-up = world +Z
-  //   BOTTOM (y=−20): screen-right = world +X,  screen-up = world +Z
-  //
-  // TOP    fix 1 (this round): z: -y → z: +y
-  //   z: -y put data-y=0 at world z=+5 → screen TOP (wrong).
-  //   z: +y puts data-y=0 at world z=-5 → screen BOTTOM ✓
-  //
-  // BOTTOM fix 2 (this round): x: -x → x
-  //   x: -x put data-x=0 at world x=+5 → screen RIGHT (wrong, screen-right=+X).
-  //   x: +x puts data-x=0 at world x=-5 → screen LEFT ✓
-  //
-  // Both faceTransforms and axisFaceTransforms must be identical per face
-  // so that data points, regression, and axes all land on the same geometry.
-
   const faceTransforms = [
     (x, y) => ({ x, y, z: 5 }), // FRONT  +Z
     (x, y) => ({ x, y, z: -5 }), // BACK   -Z
     (x, y) => ({ x: 5, y, z: x }), // RIGHT  +X
     (x, y) => ({ x: -5, y, z: x }), // LEFT   -X
-    (x, y) => ({ x: -x, y: 5, z: y }), // TOP   +Y  z: +y (fix 1)
-    (x, y) => ({ x, y: -5, z: y }), // BOTTOM -Y  x: +x (fix 2)
+    (x, y) => ({ x: -x, y: 5, z: y }), // TOP    +Y
+    (x, y) => ({ x, y: -5, z: y }), // BOTTOM -Y
   ];
 
   const axisFaceTransforms = [
@@ -167,8 +154,8 @@ export function initScene({ container, labelsContainer, onStats }) {
     (x, y) => ({ x: -x, y, z: -5 }),
     (x, y) => ({ x: 5, y, z: -x }),
     (x, y) => ({ x: -5, y, z: x }),
-    (x, y) => ({ x: -x, y: 5, z: y }), // TOP    z: +y (fix 1, matches faceTransforms)
-    (x, y) => ({ x, y: -5, z: y }), // BOTTOM x: +x (fix 2, matches faceTransforms)
+    (x, y) => ({ x: -x, y: 5, z: y }), // TOP
+    (x, y) => ({ x, y: -5, z: y }), // BOTTOM
   ];
 
   // ── Camera targets (one per face) ──────────────────────────────────────────
@@ -180,6 +167,113 @@ export function initScene({ container, labelsContainer, onStats }) {
     { x: 0, y: 20, z: 0 },
     { x: 0, y: -20, z: 0 },
   ];
+
+  // ── Tooltip element ────────────────────────────────────────────────────────
+  const tooltipEl = document.createElement("div");
+  tooltipEl.className = "point-tooltip";
+  tooltipEl.style.display = "none";
+  labelsContainer.appendChild(tooltipEl);
+
+  function showTooltip(sx, sy, dsIdx, instanceId) {
+    const d = datasets[dsIdx].data[instanceId];
+    const name = datasets[dsIdx].name;
+    const color = okabeIto[dsIdx % okabeIto.length];
+    tooltipEl.innerHTML = `
+      <div class="tt-name" style="color:${color}">${name}</div>
+      <div class="tt-row">
+        <span class="tt-key">x</span>
+        <span class="tt-val">${d.x.toFixed(2)}</span>
+      </div>
+      <div class="tt-row">
+        <span class="tt-key">y</span>
+        <span class="tt-val">${d.y.toFixed(2)}</span>
+      </div>
+    `;
+    // Clamp so tooltip never overflows the canvas container
+    const TW = 130,
+      TH = 74;
+    tooltipEl.style.left = `${Math.min(sx + 14, W() - TW)}px`;
+    tooltipEl.style.top = `${Math.max(sy - TH - 4, 4)}px`;
+    tooltipEl.style.display = "block";
+  }
+
+  function hideTooltip() {
+    tooltipEl.style.display = "none";
+    tooltipEl.classList.remove("pinned");
+  }
+
+  // ── Raycaster ──────────────────────────────────────────────────────────────
+  const raycaster = new THREE.Raycaster();
+  const mouseNDC = new THREE.Vector2();
+
+  function getHit(e) {
+    const rect = container.getBoundingClientRect();
+    mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouseNDC.y = ((e.clientY - rect.top) / rect.height) * -2 + 1;
+    raycaster.setFromCamera(mouseNDC, camera);
+    const hits = raycaster.intersectObject(pointClouds[currentSelectedIndex]);
+    return hits.length > 0 ? hits[0] : null;
+  }
+
+  function onMouseMove(e) {
+    // Hover is suppressed while a point is pinned
+    if (pinnedInstance) return;
+    const hit = getHit(e);
+    const rect = container.getBoundingClientRect();
+    if (hit) {
+      showTooltip(
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+        currentSelectedIndex,
+        hit.instanceId,
+      );
+      container.style.cursor = "crosshair";
+    } else {
+      hideTooltip();
+      container.style.cursor = "";
+    }
+  }
+
+  function onClick(e) {
+    const hit = getHit(e);
+    const rect = container.getBoundingClientRect();
+
+    if (hit) {
+      const isSame =
+        pinnedInstance &&
+        pinnedInstance.instanceId === hit.instanceId &&
+        pinnedInstance.datasetIdx === currentSelectedIndex;
+
+      if (isSame) {
+        // Click same point → unpin
+        pinnedInstance = null;
+        hideTooltip();
+        container.style.cursor = "crosshair";
+      } else {
+        // Pin new point
+        pinnedInstance = {
+          datasetIdx: currentSelectedIndex,
+          instanceId: hit.instanceId,
+          worldPos: hit.point.clone(),
+        };
+        showTooltip(
+          e.clientX - rect.left,
+          e.clientY - rect.top,
+          currentSelectedIndex,
+          hit.instanceId,
+        );
+        tooltipEl.classList.add("pinned");
+      }
+    } else if (pinnedInstance) {
+      // Click empty space → unpin
+      pinnedInstance = null;
+      hideTooltip();
+      container.style.cursor = "";
+    }
+  }
+
+  container.addEventListener("mousemove", onMouseMove);
+  container.addEventListener("click", onClick);
 
   // ── Regression ─────────────────────────────────────────────────────────────
   function clearRegression() {
@@ -196,7 +290,6 @@ export function initScene({ container, labelsContainer, onStats }) {
     clearRegression();
     const ds = datasets[index].data;
     const transform = faceTransforms[index];
-
     const isExponential = index === 4;
 
     let points3D;
@@ -204,8 +297,6 @@ export function initScene({ container, labelsContainer, onStats }) {
 
     if (isExponential) {
       // ── Exponential fit: y = a·e^(bx) ──────────────────────────────────
-      // Sample 60 points across [0,10] to produce a smooth curve — two
-      // endpoints would look like a straight line regardless of the equation.
       const { a, b } = exponentialRegression(ds);
       const r2 = computeR2Exp(ds, a, b);
       statsStr = `y = ${a.toFixed(3)}·e^(${b.toFixed(3)}x)\nR²: ${r2.toFixed(3)}`;
@@ -230,17 +321,16 @@ export function initScene({ container, labelsContainer, onStats }) {
       });
     }
 
-    // Force-refresh the camera's world matrix so .project() uses the final
-    // animated position, not the stale value from the previous render frame.
-    // Without this, the screen-space sort uses wrong projected x values and
-    // the regression draws right-to-left on TOP and BOTTOM faces.
-    camera.updateMatrixWorld(true);
-
-    // Sort left→right in screen space for a clean draw animation
-    points3D.forEach((v) => {
-      v._sx = v.clone().project(camera).x;
-    });
-    points3D.sort((a, b) => a._sx - b._sx);
+    // Sort left→right in screen space.
+    // Skipped for TOP (4) and BOTTOM (5) — gimbal lock makes .project()
+    // return inverted screen-X at y = ±20, which would reverse the draw.
+    if (index !== 4 && index !== 5) {
+      camera.updateMatrixWorld(true);
+      points3D.forEach((v) => {
+        v._sx = v.clone().project(camera).x;
+      });
+      points3D.sort((a, b) => a._sx - b._sx);
+    }
 
     const flat = [];
     points3D.forEach((v) => flat.push(v.x, v.y, v.z));
@@ -258,7 +348,7 @@ export function initScene({ container, labelsContainer, onStats }) {
     const total = flat.length / 3;
     geo.setDrawRange(0, 0);
     (function drawStep() {
-      progress += 0.1;
+      progress += 0.4;
       geo.setDrawRange(0, Math.min(progress, total));
       if (progress < total) requestAnimationFrame(drawStep);
     })();
@@ -295,38 +385,64 @@ export function initScene({ container, labelsContainer, onStats }) {
 
       // Ticks + HTML labels
       ticks.forEach((t) => {
-        // X tick
         addLine(xScale(t), yScale(0), xScale(t), yScale(-0.3));
+        addLine(xScale(0), yScale(t), xScale(-0.3), yScale(t));
+
         if (labelsContainer) {
-          const p = tfm(xScale(t), yScale(-0.3));
-          const el = Object.assign(document.createElement("div"), {
+          // X tick label
+          const px = tfm(xScale(t), yScale(-0.7));
+          const ex = Object.assign(document.createElement("div"), {
             className: "axis-label",
             textContent: t,
           });
-          labelsContainer.appendChild(el);
+          labelsContainer.appendChild(ex);
           axisHtmlLabels.push({
-            element: el,
-            position: new THREE.Vector3(p.x, p.y, p.z),
+            element: ex,
+            position: new THREE.Vector3(px.x, px.y, px.z),
             face,
           });
-        }
 
-        // Y tick
-        addLine(xScale(0), yScale(t), xScale(-0.3), yScale(t));
-        if (labelsContainer) {
-          const p = tfm(xScale(-0.3), yScale(t));
-          const el = Object.assign(document.createElement("div"), {
+          // Y tick label
+          const py = tfm(xScale(-0.7), yScale(t));
+          const ey = Object.assign(document.createElement("div"), {
             className: "axis-label",
             textContent: t,
           });
-          labelsContainer.appendChild(el);
+          labelsContainer.appendChild(ey);
           axisHtmlLabels.push({
-            element: el,
-            position: new THREE.Vector3(p.x, p.y, p.z),
+            element: ey,
+            position: new THREE.Vector3(py.x, py.y, py.z),
             face,
           });
         }
       });
+
+      // ── Axis name labels (X / Y) ───────────────────────────────────────
+      if (labelsContainer) {
+        const xNamePos = tfm(xScale(11.2), yScale(0));
+        const xName = Object.assign(document.createElement("div"), {
+          className: "axis-label axis-name-label",
+          textContent: "X",
+        });
+        labelsContainer.appendChild(xName);
+        axisHtmlLabels.push({
+          element: xName,
+          position: new THREE.Vector3(xNamePos.x, xNamePos.y, xNamePos.z),
+          face,
+        });
+
+        const yNamePos = tfm(xScale(0), yScale(11.2));
+        const yName = Object.assign(document.createElement("div"), {
+          className: "axis-label axis-name-label",
+          textContent: "Y",
+        });
+        labelsContainer.appendChild(yName);
+        axisHtmlLabels.push({
+          element: yName,
+          position: new THREE.Vector3(yNamePos.x, yNamePos.y, yNamePos.z),
+          face,
+        });
+      }
 
       axisGroups.push(group);
       cubeGroup.add(group);
@@ -404,7 +520,7 @@ export function initScene({ container, labelsContainer, onStats }) {
     const end = new THREE.Vector3(target.x, target.y, target.z);
     let t = 0;
     (function step() {
-      t += 0.002;
+      t += 0.009;
       camera.position.lerpVectors(start, end, t);
       controls.target.lerp(new THREE.Vector3(0, 0, 0), t);
       t < 1 ? requestAnimationFrame(step) : onComplete?.();
@@ -432,12 +548,23 @@ export function initScene({ container, labelsContainer, onStats }) {
       controls.update();
     }
 
-    // Update HTML axis label positions relative to the container
+    // Update HTML axis label screen positions
     axisHtmlLabels.forEach((lbl) => {
       const p = lbl.position.clone().project(camera);
       lbl.element.style.left = `${(p.x * 0.5 + 0.5) * W()}px`;
       lbl.element.style.top = `${(-p.y * 0.5 + 0.5) * H()}px`;
     });
+
+    // Keep pinned tooltip locked to its 3D world position as camera orbits
+    if (pinnedInstance) {
+      const p = pinnedInstance.worldPos.clone().project(camera);
+      const sx = (p.x * 0.5 + 0.5) * W();
+      const sy = (-p.y * 0.5 + 0.5) * H();
+      const TW = 130,
+        TH = 74;
+      tooltipEl.style.left = `${Math.min(sx + 14, W() - TW)}px`;
+      tooltipEl.style.top = `${Math.max(sy - TH - 4, 4)}px`;
+    }
 
     renderer.render(scene, camera);
   }
@@ -454,12 +581,18 @@ export function initScene({ container, labelsContainer, onStats }) {
   // ── Public API ─────────────────────────────────────────────────────────────
   return {
     selectDataset(i) {
+      currentSelectedIndex = i;
+      pinnedInstance = null; // clear pin on dataset switch
+      hideTooltip();
+      container.style.cursor = "";
       animateCameraTo(cameraTargets[i], () => {
         animateOpacity(i);
         drawRegressionForDataset(i);
       });
     },
     cleanup() {
+      container.removeEventListener("mousemove", onMouseMove);
+      container.removeEventListener("click", onClick);
       cancelAnimationFrame(animFrameId);
       ro.disconnect();
       renderer.dispose();
